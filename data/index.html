@@ -1,0 +1,121 @@
+<html>
+
+<head>
+    <script>if (typeof module === 'object') { window.module = module; module = undefined; }</script>
+    <script src="https://code.jquery.com/jquery-3.6.0.js" crossorigin></script>
+    <script>if (window.module) module = window.module;</script>
+
+    <script>
+        const { dialog } = require('@electron/remote')
+
+        function PickInstallationFolder() {
+            let foo = dialog.showOpenDialogSync({
+                title: "Installation Path",
+                properties: ['openDirectory']
+            });
+
+            $("#path").val(foo[0]);
+        }
+
+        function StartInstallation() {
+            astilectron.sendMessage({
+                "Name": "StartInstallation",
+                "InstallationPath": $("#path").val()
+            });
+
+            $("#installation_path").hide();
+            $("#progress").show();
+        }
+
+        function StartGame() {
+            astilectron.sendMessage({ "Name": "StartGame" });
+        }
+
+        function Quit() {
+            astilectron.sendMessage({ "Name": "Quit" });
+        }
+
+        document.addEventListener('astilectron-ready', function () {
+            $("#installation_path").hide();
+            $("#done").hide();
+
+            astilectron.onMessage(function (message) {
+                const msg = JSON.parse(message);
+                if (msg["Name"] === "AskInstallationPath") {
+                    $("#progress").hide();
+                    $("#installation_path").show();
+                    return null
+                } else if (msg["Name"] == "ProgressText") {
+                    $("#patch_progress_text").text(msg["Text"]);
+                    return null
+                } else if (msg["Name"] === "Done") {
+                    $("#progress").hide();
+                    $("#done").show();
+                    return null
+                }
+            });
+        });
+
+    </script>
+
+    <style>
+        body {
+            background-color: rgb(33, 33, 33);
+            color: white;
+        }
+
+        #patch_progress_text {
+            position: absolute;
+            left: 0;
+            right: 0;
+            margin-left: auto;
+            margin-right: auto;
+            bottom: 60px;
+            height: 80px;
+            width: 80%;
+            -webkit-appearance: none;
+        }
+
+        #start_button {
+            padding: 20px;
+            background-color: rgb(1, 160, 67);
+            color: white;
+            text-decoration: none;
+            text-align: center;
+            width: 300px;
+            display: block;
+        }
+    </style>
+</head>
+
+<body>
+    <a style="position: absolute;top:2px;right:0;width:20px;height:20px;background-color: red; display: block;text-decoration: none;"
+        href="javascript:Quit()">
+    </a>
+
+    <div id="progress">
+        <span id="patch_progress_text"></span>
+    </div>
+    <div id="installation_path">
+        Game not installed yet. Pick an installation path.
+        <br>
+        <br>
+        <div>Installation Path <input id="path"> <a href="javascript:PickInstallationFolder()">Pick</a></div>
+        <br>
+        <a href="javascript:StartInstallation()">Start installation</a>
+    </div>
+    <div id="done">
+        <div style="position: absolute;
+        left: 50%;
+        top: 50%;
+        transform: translate(-50%, -50%);">
+            Up to date.
+            <br>
+            <br>
+            <br>
+            <a id="start_button" href="javascript:StartGame()">Start</a>
+        </div>
+    </div>
+</body>
+
+</html>

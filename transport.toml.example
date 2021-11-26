@@ -1,0 +1,18 @@
+# Select which backend is used
+# The backend is used to store/load files, including the patch database and the patches themselves
+backend="local"
+chunk_size_mb=50
+
+# Local backend for testing
+[local]
+path="..."
+
+# SFTP backend
+[sftp]
+host="..."
+user="..."
+pw="..."
+
+# HTTP read-only backend for end users
+[http]
+host="..."
