@@ -23,8 +23,7 @@
                 "InstallationPath": $("#path").val()
             });
 
-            $("#installation_path").hide();
-            $("#progress").show();
+            SwitchToTab("#progress");
         }
 
         function StartGame() {
@@ -36,25 +35,29 @@
         }
 
         document.addEventListener('astilectron-ready', function () {
-            $("#installation_path").hide();
-            $("#done").hide();
+            SwitchToTab("#progress");
 
             astilectron.onMessage(function (message) {
                 const msg = JSON.parse(message);
                 if (msg["Name"] === "AskInstallationPath") {
-                    $("#progress").hide();
-                    $("#installation_path").show();
-                    return null
+                    $("#path").val(msg["DefaultPath"]);
+                    SwitchToTab("#installation_path");
                 } else if (msg["Name"] == "ProgressText") {
                     $("#patch_progress_text").text(msg["Text"]);
-                    return null
                 } else if (msg["Name"] === "Done") {
-                    $("#progress").hide();
-                    $("#done").show();
-                    return null
+                    SwitchToTab("#done");
                 }
+                return null
             });
         });
+
+        function SwitchToTab(cls) {
+            $("#installation_path").hide();
+            $("#done").hide();
+            $("#progress").hide();
+
+            $(cls).show();
+        }
 
     </script>
 
@@ -62,6 +65,17 @@
         body {
             background-color: rgb(33, 33, 33);
             color: white;
+        }
+
+        .button {
+            text-decoration: none;
+            background-color: white;
+            color: black;
+            padding: 1px 10px 1px 10px;
+        }
+
+        .button:hover {
+            font-weight: bold;
         }
 
         #patch_progress_text {
@@ -85,24 +99,92 @@
             width: 300px;
             display: block;
         }
+
+        #start_button:hover {
+            transition: border-size 1s;
+            background-color: rgb(0, 197, 82);
+            color: black;
+        }
+
+
+        .lds-ripple {
+            display: inline-block;
+            width: 80px;
+            height: 80px;
+
+            position: absolute;
+            left: 50%;
+            top: 30%;
+            transform: translate(-50%, -50%);
+        }
+
+        .lds-ripple div {
+            position: absolute;
+            border: 4px solid #fff;
+            opacity: 1;
+            border-radius: 50%;
+            animation: lds-ripple 1s cubic-bezier(0, 0.2, 0.8, 1) infinite;
+        }
+
+        .lds-ripple div:nth-child(2) {
+            animation-delay: -0.5s;
+        }
+
+        @keyframes lds-ripple {
+            0% {
+                top: 36px;
+                left: 36px;
+                width: 0;
+                height: 0;
+                opacity: 1;
+            }
+
+            100% {
+                top: 0px;
+                left: 0px;
+                width: 72px;
+                height: 72px;
+                opacity: 0;
+            }
+        }
+
+        #quit {
+            position: absolute;
+            top: 0;
+            right: 0;
+            width: 20px;
+            height: 20px;
+            background-color: rgb(167, 1, 1);
+            display: block;
+            text-decoration: none;
+        }
+
+        #quit:hover {
+            background-color: red;
+        }
     </style>
 </head>
 
 <body>
-    <a style="position: absolute;top:2px;right:0;width:20px;height:20px;background-color: red; display: block;text-decoration: none;"
-        href="javascript:Quit()">
-    </a>
+    <a id="quit" href="javascript:Quit()"></a>
 
     <div id="progress">
+        <div class="lds-ripple">
+            <div></div>
+            <div></div>
+        </div>
+
         <span id="patch_progress_text"></span>
     </div>
     <div id="installation_path">
         Game not installed yet. Pick an installation path.
         <br>
         <br>
-        <div>Installation Path <input id="path"> <a href="javascript:PickInstallationFolder()">Pick</a></div>
+        <div>Installation Path: <input style="width: 60%;" id="path"> <a href="javascript:PickInstallationFolder()"
+                class="button">Browse</a>
+        </div>
         <br>
-        <a href="javascript:StartInstallation()">Start installation</a>
+        <a href="javascript:StartInstallation()" class="button">Start installation</a>
     </div>
     <div id="done">
         <div style="position: absolute;

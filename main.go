@@ -21,6 +21,145 @@ const ExecutableName = "Massive.exe"
 
 var msgFromJS chan *astilectron.EventMessage = make(chan *astilectron.EventMessage)
 
+func main() {
+	downloadTransportCli()
+
+	logger := log.New(os.Stderr, "", 0)
+	options := astilectron.Options{
+		AppName:            Title,
+		AppIconDefaultPath: "./App-Launcher-icon.png",
+		BaseDirectoryPath:  "data",
+		DataDirectoryPath:  "data",
+		VersionAstilectron: "0.49.0",
+		VersionElectron:    "15.3.2",
+	}
+	var a, _ = astilectron.New(logger, options)
+	defer a.Close()
+
+	a.Start()
+
+	var w, _ = a.NewWindow("data/index.html", &astilectron.WindowOptions{
+		Center: astikit.BoolPtr(true),
+		Height: astikit.IntPtr(400),
+		Width:  astikit.IntPtr(600),
+		Frame:  astikit.BoolPtr(false),
+	})
+	w.Create()
+	defer w.Close()
+
+	w.OnMessage(func(m *astilectron.EventMessage) interface{} {
+		msgFromJS <- m
+		return nil
+	})
+
+	installationPath, err := getInstallPath(w)
+	if err != nil {
+		log.Fatal(err)
+		return
+	}
+	if installationPath == nil {
+		return // Cancel
+	}
+
+	go func() {
+		m := <-msgFromJS
+
+		var result map[string]interface{}
+		m.Unmarshal(&result)
+
+		name := result["Name"].(string)
+		if name == "StartGame" {
+			cmd := exec.Command(filepath.Join(*installationPath, ExecutableName))
+			cmd.Run()
+
+			a.Stop()
+		} else if name == "Quit" {
+			a.Stop()
+		}
+	}()
+
+	start(*installationPath, w)
+
+	a.Wait()
+}
+
+func getInstallPath(w *astilectron.Window) (*string, error) {
+	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\MKSQD\Massive`, registry.READ)
+	if err != nil {
+		if fileContent, err2 := os.ReadFile("InstallationPath"); err2 == nil {
+			installationPath := string(fileContent)
+			return &installationPath, nil
+		}
+
+		if err == registry.ErrNotExist {
+			path, _ := os.Getwd()
+			path = filepath.Join(path, Title)
+			escapedPath := strings.ReplaceAll(path, "\\", "/")
+
+			w.SendMessage(`{"Name": "AskInstallationPath", "DefaultPath": "` + escapedPath + `"}`)
+
+			m := <-msgFromJS
+
+			var result map[string]interface{}
+			m.Unmarshal(&result)
+
+			if result["Name"] == "Quit" {
+				return nil, nil
+			}
+
+			installationPath := result["InstallationPath"].(string)
+
+			k, _, err = registry.CreateKey(registry.LOCAL_MACHINE, `SOFTWARE\MKSQD\Massive`, registry.WRITE|registry.SET_VALUE)
+			if err != nil {
+				os.WriteFile("InstallationPath", []byte(installationPath), 0666)
+				return &installationPath, nil
+			}
+			defer k.Close()
+
+			k.SetStringValue("InstallationPath", installationPath)
+
+			return &installationPath, nil
+		}
+
+		return nil, err
+	}
+	defer k.Close()
+
+	path, _, err := k.GetStringValue("InstallationPath")
+	if err != nil {
+		return nil, err
+	}
+
+	return &path, nil
+}
+
+type sendToJsWriter struct {
+	w *astilectron.Window
+}
+
+func (e sendToJsWriter) Write(p []byte) (int, error) {
+	escapedText := strings.ReplaceAll(string(p), "\\", "/")
+	escapedText = strings.ReplaceAll(escapedText, "\n", "")
+	e.w.SendMessage(`{"Name": "ProgressText", "Text": "` + escapedText + `"}`)
+	return len(p), nil
+}
+
+func start(installationPath string, w *astilectron.Window) {
+	cmd := exec.Command("./transport-cli.exe", "restore", "latest", installationPath)
+
+	writer := sendToJsWriter{w: w}
+	cmd.Stdout = &writer
+
+	if err := cmd.Start(); err != nil {
+		log.Fatal(err)
+	}
+
+	cmd.Wait()
+
+	w.SendMessage(`{"Name": "Done"}`)
+}
+
+// #todo error handling
 func downloadTransportCli() {
 	resp, _ := http.Get("https://api.github.com/repos/OneManMonkeySquad/transport-cli/releases/latest")
 	defer resp.Body.Close()
@@ -59,141 +198,4 @@ func downloadTransportCli() {
 	os.WriteFile("transport-cli.exe", body, 0666)
 
 	os.WriteFile("TransportCliVersion", []byte(publishedAt), 0666)
-}
-
-func main() {
-	downloadTransportCli()
-
-	logger := log.New(os.Stderr, "", 0)
-	options := astilectron.Options{
-		AppName:            Title,
-		AppIconDefaultPath: "./App-Launcher-icon.png",
-		BaseDirectoryPath:  "data",
-		DataDirectoryPath:  "data",
-		VersionAstilectron: "0.49.0",
-		VersionElectron:    "15.3.2",
-	}
-	var a, _ = astilectron.New(logger, options)
-	defer a.Close()
-
-	a.Start()
-
-	var w, _ = a.NewWindow("data/index.html", &astilectron.WindowOptions{
-		Center: astikit.BoolPtr(true),
-		Height: astikit.IntPtr(400),
-		Width:  astikit.IntPtr(600),
-		Frame:  astikit.BoolPtr(false),
-	})
-	w.Create()
-
-	w.OnMessage(func(m *astilectron.EventMessage) interface{} {
-		msgFromJS <- m
-		return nil
-	})
-
-	installationPath, err := getInstallPath(w)
-	if err != nil {
-		log.Fatal(err)
-		return
-	}
-
-	go func() {
-		m := <-msgFromJS
-
-		var result map[string]interface{}
-		m.Unmarshal(&result)
-
-		name := result["Name"].(string)
-		if name == "StartGame" {
-			cmd := exec.Command(filepath.Join(*installationPath, ExecutableName))
-			cmd.Run()
-
-			a.Stop()
-		} else if name == "Quit" {
-			a.Stop()
-		}
-	}()
-
-	start(*installationPath, w)
-
-	a.Wait()
-}
-
-func getInstallPath(w *astilectron.Window) (*string, error) {
-	k, err := registry.OpenKey(registry.LOCAL_MACHINE, `SOFTWARE\MKSQD\Massive`, registry.READ)
-	if err != nil {
-		if fileContent, err2 := os.ReadFile("InstallationPath"); err2 == nil {
-			installationPath := string(fileContent)
-			return &installationPath, nil
-		}
-
-		if err == registry.ErrNotExist {
-			fmt.Println("Registry path not found")
-
-			w.SendMessage(`{"Name": "AskInstallationPath"}`)
-
-			m := <-msgFromJS
-
-			var result map[string]interface{}
-			m.Unmarshal(&result)
-
-			if result["Name"] == "Quit" {
-				os.Exit(0)
-			}
-
-			installationPath := result["InstallationPath"].(string)
-
-			fmt.Println("1")
-
-			k, _, err = registry.CreateKey(registry.LOCAL_MACHINE, `SOFTWARE\MKSQD\Massive`, registry.WRITE|registry.SET_VALUE)
-			if err != nil {
-				os.WriteFile("InstallationPath", []byte(installationPath), 0666)
-				return &installationPath, nil
-			}
-			defer k.Close()
-
-			fmt.Println("Setting registry path")
-
-			k.SetStringValue("InstallationPath", installationPath)
-
-			return &installationPath, nil
-		}
-
-		return nil, err
-	}
-	defer k.Close()
-
-	path, _, err := k.GetStringValue("InstallationPath")
-	if err != nil {
-		return nil, err
-	}
-
-	return &path, nil
-}
-
-type sendToJsWriter struct {
-	w *astilectron.Window
-}
-
-func (e sendToJsWriter) Write(p []byte) (int, error) {
-	s := string(p)
-	s = strings.ReplaceAll(s, "\\", "/")
-	s = strings.ReplaceAll(s, "\n", "")
-	e.w.SendMessage(`{"Name": "ProgressText", "Text": "` + s + `"}`)
-	return len(p), nil
-}
-
-func start(installationPath string, w *astilectron.Window) {
-	cmd := exec.Command("./transport-cli.exe", "restore", "latest", installationPath)
-
-	writer := sendToJsWriter{w: w}
-	cmd.Stdout = &writer
-
-	if err := cmd.Start(); err != nil {
-		log.Fatal(err)
-	}
-
-	cmd.Wait()
-
-	w.SendMessage(`{"Name": "Done"}`)
 }

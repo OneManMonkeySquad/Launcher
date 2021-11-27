@@ -1,5 +1,8 @@
-
 transport.toml
+InstallationPath
+TransportCliVersion
+transport-cli.exe
+launcher.exe
 
 data/node_modules/
 data/vendor/
